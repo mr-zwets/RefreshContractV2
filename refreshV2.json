@@ -1,0 +1,47 @@
+{
+  "contractName": "LastToRefreshWins",
+  "constructorInputs": [
+    {
+      "name": "increment",
+      "type": "int"
+    },
+    {
+      "name": "contractFeeRate",
+      "type": "bytes1"
+    },
+    {
+      "name": "pkhFeeAddress",
+      "type": "bytes20"
+    },
+    {
+      "name": "period",
+      "type": "bytes1"
+    },
+    {
+      "name": "pkhRecipient",
+      "type": "bytes20"
+    }
+  ],
+  "abi": [
+    {
+      "name": "refresh",
+      "inputs": [
+        {
+          "name": "pkhNewRecipient",
+          "type": "bytes20"
+        }
+      ]
+    },
+    {
+      "name": "payout",
+      "inputs": []
+    }
+  ],
+  "bytecode": "OP_5 OP_PICK OP_0 OP_NUMEQUAL OP_IF OP_UNKNOWN192 OP_0 OP_NUMEQUALVERIFY OP_0 OP_UNKNOWN198 OP_ADD 14 OP_7 OP_ROLL OP_CAT OP_UNKNOWN193 15 OP_SPLIT OP_NIP OP_CAT OP_0 OP_UNKNOWN204 OP_ROT OP_NUMEQUALVERIFY a914 OP_SWAP OP_HASH160 OP_CAT 87 OP_CAT OP_0 OP_UNKNOWN205 OP_EQUALVERIFY OP_2DROP OP_2DROP OP_DROP OP_1 OP_ELSE OP_5 OP_ROLL OP_1 OP_NUMEQUALVERIFY OP_UNKNOWN192 OP_0 OP_NUMEQUALVERIFY OP_0 OP_UNKNOWN198 OP_ROT OP_BIN2NUM OP_MUL 64 OP_DIV OP_0 OP_UNKNOWN198 OP_OVER OP_SUB f401 OP_SUB OP_0 OP_UNKNOWN204 OP_NUMEQUALVERIFY 76a914 OP_5 OP_ROLL OP_CAT 88ac OP_CAT OP_0 OP_UNKNOWN205 OP_EQUALVERIFY OP_1 OP_UNKNOWN204 OP_NUMEQUALVERIFY 76a914 OP_ROT OP_CAT 88ac OP_CAT OP_1 OP_UNKNOWN205 OP_EQUALVERIFY OP_SWAP OP_BIN2NUM OP_CHECKSEQUENCEVERIFY OP_2DROP OP_1 OP_ENDIF",
+  "source": "pragma cashscript ^0.7.0;\n\n// Payout() can be invoked after relative locktime PERIOD to the pkh in simulated state.\n// It also requires a % of the contract balance, CONTRACTFEERATE, to be paid to PKHFEEADDRESS\n// The pkh in the state can be changed by invoking refresh(), this requires the contract balance to increase with INCREMENT.\n\n// Opcode count: 58 (max 201)\n// Bytesize: 105 (max 520)\n\ncontract LastToRefreshWins(\n    // constant constructor parameters \n    int increment,\n    byte contractFeeRate,\n    bytes20 pkhFeeAddress,\n    byte period,\n\n    // constructor parameters of simulated state\n    // last because constructor parameters are added in reverse order\n    bytes20 pkhRecipient\n) {\n    function refresh(\n        bytes20 pkhNewRecipient // new payout address\n    ) {\n        require(this.activeInputIndex == 0);\n        // require contract balance to increase by increment\n        int newBalance = tx.inputs[0].value + increment;\n        // add new simulated state parameters to the the bytecode with them cut out\n        // push 20 bytes, pkhNewRecipient = 21 bytes total\n        bytes newContract = 0x14 + pkhNewRecipient + this.activeBytecode.split(21)[1];\n        // require next state contract on output index zero\n        // can add change output on index one if input larger than increment + fee + dustlimit \n        require(tx.outputs[0].value == newBalance);\n        bytes23 newContractLock = new LockingBytecodeP2SH(hash160(newContract));\n        require(tx.outputs[0].lockingBytecode == newContractLock);\n    }\n    function payout(\n    ) {\n        require(this.activeInputIndex == 0);\n        int contractFee = tx.inputs[0].value * int(contractFeeRate) / 100;\n        int amountPayout = tx.inputs[0].value - contractFee - 500; // 500 hardcoded fee\n        // require payout on output index zero\n        require(tx.outputs[0].value == amountPayout);\n        bytes25 winnerPayoutLock = new LockingBytecodeP2PKH(pkhRecipient);\n        require(tx.outputs[0].lockingBytecode == winnerPayoutLock);\n        // require contractFee on output index one\n        require(tx.outputs[1].value == contractFee);\n        bytes25 contractFeeLock = new LockingBytecodeP2PKH(pkhFeeAddress);\n        require(tx.outputs[1].lockingBytecode == contractFeeLock);\n        //check relative locktime\n        require(tx.age >= int(period));\n    }\n}\n",
+  "compiler": {
+    "name": "cashc",
+    "version": "0.7.0"
+  },
+  "updatedAt": "2022-05-16T14:53:15.259Z"
+}
